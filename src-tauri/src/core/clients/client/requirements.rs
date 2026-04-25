@@ -35,113 +35,60 @@ impl Client {
 
         let download_result = match self.client_type {
             ClientType::Forge => {
-                // Check if this is Luminar OLD custom client
-                if self.name == "Luminar OLD" && self.meta.is_custom {
-                    let client_base = Data::get_filename(&self.filename);
-                    let mods_folder = format!("{client_base}{MAIN_SEPARATOR}{MODS_FOLDER}");
-                    let safe_ver = sanitize_version_for_paths(&self.version);
+                let client_base = Data::get_filename(&self.filename);
+                let mods_folder = format!("{client_base}{MAIN_SEPARATOR}{MODS_FOLDER}");
+                let safe_ver = sanitize_version_for_paths(&self.version);
 
-                    // Download Luminar from GitHub raw
-                    let luminar_url = "https://raw.githubusercontent.com/szozium/cl-recode/main/luminar-0.3.1.jar";
-                    DATA.download_from_url(luminar_url, &format!("{mods_folder}/{}", self.filename))
-                        .await
-                        .map_err(|e| format!("Luminar download failed: {e}"))?;
-
-                    // Download Forge with fallback: GitHub mirror -> Maven
-                    let forge_version = format!("{}-36.2.39", self.version); // 1.16.5-36.2.39 is stable release
-                    let dest_path = DATA
-                        .root_dir
-                        .lock()
-                        .unwrap()
-                        .join(MINECRAFT_VERSIONS_FOLDER)
-                        .join(format!("forge_{}.jar", safe_ver));
-
-                    let forge_urls = vec![
-                        format!("https://github.com/szozium/cl-recode/releases/download/forge/forge-{}-installer.jar", forge_version),
-                        format!("https://maven.minecraftforge.net/net/minecraftforge/forge/{}/forge-{}-installer.jar", forge_version, forge_version),
-                    ];
-
-                    let mut forge_downloaded = false;
-                    let mut last_error = String::new();
-
-                    for (idx, url) in forge_urls.iter().enumerate() {
-                        let source = if idx == 0 { "GitHub mirror" } else { "Maven" };
-                        log_info!("Trying Forge download from {}: {}", source, url);
-
-                        match DATA.download_from_url(url, dest_path.to_str().unwrap()).await {
-                            Ok(_) => {
-                                forge_downloaded = true;
-                                log_info!("Successfully downloaded Forge from {}", source);
-                                break;
-                            }
-                            Err(e) => {
-                                last_error = format!("{} download failed: {}", source, e);
-                                log_warn!("{}", last_error);
-                            }
-                        }
-                    }
-
-                    if !forge_downloaded {
-                        return Err(format!("Forge download failed from all sources. Last error: {}", last_error));
-                    }
-
-                    Ok(())
+                let remote_path = if self.filename.contains('/') {
+                    let parts: Vec<&str> = self.filename.split('/').collect();
+                    format!("clients/{}/jars/{}", parts[0], parts[1])
                 } else {
-                    let client_base = Data::get_filename(&self.filename);
-                    let mods_folder = format!("{client_base}{MAIN_SEPARATOR}{MODS_FOLDER}");
-                    let safe_ver = sanitize_version_for_paths(&self.version);
+                    format!("clients/forge/jars/{}", self.filename)
+                };
 
-                    let remote_path = if self.filename.contains('/') {
-                        let parts: Vec<&str> = self.filename.split('/').collect();
-                        format!("clients/{}/jars/{}", parts[0], parts[1])
-                    } else {
-                        format!("clients/forge/jars/{}", self.filename)
-                    };
+                DATA.download_to_folder(&remote_path, &mods_folder)
+                    .await
+                    .map_err(|e| format!("Forge Mod download failed: {e}"))?;
 
-                    DATA.download_to_folder(&remote_path, &mods_folder)
-                        .await
-                        .map_err(|e| format!("Forge Mod download failed: {e}"))?;
+                // Download Forge with fallback: GitHub mirror -> Maven
+                let forge_version = format!("{}-36.2.39", self.version); // 1.16.5-36.2.39 is stable release
+                let dest_path = DATA
+                    .root_dir
+                    .lock()
+                    .unwrap()
+                    .join(MINECRAFT_VERSIONS_FOLDER)
+                    .join(format!("forge_{}.jar", safe_ver));
 
-                    // Download Forge with fallback: GitHub mirror -> Maven
-                    let forge_version = format!("{}-36.2.39", self.version); // 1.16.5-36.2.39 is stable release
-                    let dest_path = DATA
-                        .root_dir
-                        .lock()
-                        .unwrap()
-                        .join(MINECRAFT_VERSIONS_FOLDER)
-                        .join(format!("forge_{}.jar", safe_ver));
+                let forge_urls = vec![
+                    format!("https://github.com/szozium/cl-recode/releases/download/forge/forge-{}-installer.jar", forge_version),
+                    format!("https://maven.minecraftforge.net/net/minecraftforge/forge/{}/forge-{}-installer.jar", forge_version, forge_version),
+                ];
 
-                    let forge_urls = vec![
-                        format!("https://github.com/szozium/cl-recode/releases/download/forge/forge-{}-installer.jar", forge_version),
-                        format!("https://maven.minecraftforge.net/net/minecraftforge/forge/{}/forge-{}-installer.jar", forge_version, forge_version),
-                    ];
+                let mut forge_downloaded = false;
+                let mut last_error = String::new();
 
-                    let mut forge_downloaded = false;
-                    let mut last_error = String::new();
+                for (idx, url) in forge_urls.iter().enumerate() {
+                    let source = if idx == 0 { "GitHub mirror" } else { "Maven" };
+                    log_info!("Trying Forge download from {}: {}", source, url);
 
-                    for (idx, url) in forge_urls.iter().enumerate() {
-                        let source = if idx == 0 { "GitHub mirror" } else { "Maven" };
-                        log_info!("Trying Forge download from {}: {}", source, url);
-
-                        match DATA.download_from_url(url, dest_path.to_str().unwrap()).await {
-                            Ok(_) => {
-                                forge_downloaded = true;
-                                log_info!("Successfully downloaded Forge from {}", source);
-                                break;
-                            }
-                            Err(e) => {
-                                last_error = format!("{} download failed: {}", source, e);
-                                log_warn!("{}", last_error);
-                            }
+                    match DATA.download_from_url(url, dest_path.to_str().unwrap()).await {
+                        Ok(_) => {
+                            forge_downloaded = true;
+                            log_info!("Successfully downloaded Forge from {}", source);
+                            break;
+                        }
+                        Err(e) => {
+                            last_error = format!("{} download failed: {}", source, e);
+                            log_warn!("{}", last_error);
                         }
                     }
-
-                    if !forge_downloaded {
-                        return Err(format!("Forge download failed from all sources. Last error: {}", last_error));
-                    }
-
-                    Ok(())
                 }
+
+                if !forge_downloaded {
+                    return Err(format!("Forge download failed from all sources. Last error: {}", last_error));
+                }
+
+                Ok(())
             }
             ClientType::Fabric => {
                 let client_base = Data::get_filename(&self.filename);

@@ -2,9 +2,8 @@ use rand::RngExt;
 use std::sync::{Arc, Mutex};
 use std::{fs::File, io::BufReader};
 use tauri::{AppHandle, Manager};
-use chrono::Utc;
 
-use super::client::{Client, ClientType, Requirement};
+use super::client::Client;
 use crate::core::clients::client::Meta;
 use crate::core::utils::globals::{
     FABRIC_CLIENTS_URL, FORGE_CLIENTS_URL, MOCK_CLIENTS, VANILLA_CLIENTS_URL,
@@ -168,45 +167,6 @@ impl ClientManager {
             "Nixware", "Neverlose", "Minced", "ExcellentOmni"
         ];
         clients.retain(|client| allowed_clients.contains(&client.name.as_str()));
-
-        // Add custom Luminar OLD client
-        let luminar_client = Client {
-            id: 9999,
-            name: "Luminar OLD".to_string(),
-            version: "1.16.5".to_string(),
-            filename: "luminar-0.3.1.jar".to_string(),
-            md5_hash: "".to_string(),
-            main_class: "net.minecraft.launchwrapper.Launch".to_string(),
-            show: true,
-            working: true,
-            insecure: false,
-            launches: 0,
-            downloads: 0,
-            rating_avg: None,
-            rating_count: None,
-            size: 0,
-            meta: Meta {
-                is_new: false,
-                is_fabric: false,
-                is_forge: true,
-                asset_index: "1.16".to_string(),
-                installed: false,
-                is_custom: true,
-                size: 0,
-            },
-            dependencies: Some(vec![
-                Requirement {
-                    name: "forge-1.16.5".to_string(),
-                    md5_hash: None,
-                    size: None,
-                }
-            ]),
-            client_type: ClientType::Forge,
-            created_at: Utc::now(),
-            java_path: None,
-            java_args: None,
-        };
-        clients.push(luminar_client);
 
         clients.sort_by_key(|b| std::cmp::Reverse(b.created_at));
 
