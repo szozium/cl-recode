@@ -1,0 +1,23 @@
+#[cfg(target_os = "windows")]
+pub(crate) mod windows;
+#[cfg(target_os = "windows")]
+pub use self::windows::check_platform_dependencies;
+
+#[cfg(target_os = "windows")]
+pub mod messagebox;
+
+pub mod error;
+
+#[cfg(target_os = "macos")]
+use self::error::StartupError;
+
+#[cfg(target_os = "linux")]
+mod linux;
+
+#[cfg(target_os = "linux")]
+pub use self::linux::{check_platform_dependencies, check_webkit_environment};
+
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+pub fn check_platform_dependencies() -> Result<(), StartupError> {
+    Ok(())
+}

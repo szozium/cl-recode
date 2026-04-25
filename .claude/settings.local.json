@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo --version)",
+      "Bash(rustc --version)",
+      "Bash(npm run *)",
+      "Bash(export PATH=\"$HOME/.cargo/bin:$PATH\")",
+      "Bash(cargo build *)",
+      "Bash(sudo tee *)",
+      "Bash(powershell *)",
+      "Bash(cargo clean *)",
+      "Bash(curl *)",
+      "Bash(tasklist)",
+      "Bash(findstr /i \"cl-recode setup nsis msi\")"
+    ]
+  }
+}

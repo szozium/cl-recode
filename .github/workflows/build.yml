@@ -1,0 +1,194 @@
+name: Build and Release
+
+on:
+    push:
+        branches: [main, dev]
+
+    workflow_dispatch:
+        inputs:
+            skip_verify:
+                description: "Skip commit message verification"
+                type: boolean
+                default: false
+
+            build_macos:
+                description: "Force macOS build"
+                type: boolean
+                default: false
+
+jobs:
+    check-flags:
+        runs-on: ubuntu-latest
+
+        outputs:
+            skip: ${{ steps.flags.outputs.skip }}
+            build_macos: ${{ steps.flags.outputs.build_macos }}
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - id: flags
+              shell: bash
+              run: |
+
+                  msg="$(git log -1 --pretty=%B)"
+
+                  echo "Commit message:"
+                  echo "$msg"
+
+                  SKIP=false
+                  BUILD_MAC=false
+
+                  if [[ "${{ github.event.inputs.skip_verify }}" == "true" ]]; then
+                    echo "Manual override: skipping commit verification"
+                    SKIP=false
+                  else
+                    if echo "$msg" | grep -Ei "\[skip ci\]|skip-ci|skip_ci"; then
+                      SKIP=true
+                    fi
+                  fi
+
+                  if echo "$msg" | grep -Ei "release|build macos"; then
+                    BUILD_MAC=true
+                  fi
+
+                  if [[ "${{ github.event.inputs.build_macos }}" == "true" ]]; then
+                    BUILD_MAC=true
+                  fi
+
+                  echo "skip=$SKIP" >> $GITHUB_OUTPUT
+                  echo "build_macos=$BUILD_MAC" >> $GITHUB_OUTPUT
+
+    build:
+        needs: check-flags
+        if: needs.check-flags.outputs.skip != 'true'
+
+        strategy:
+            fail-fast: false
+            matrix:
+                platform: [ubuntu-22.04, windows-latest]
+
+        runs-on: ${{ matrix.platform }}
+
+        permissions:
+            contents: write
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+
+            - uses: dtolnay/rust-toolchain@stable
+
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  workspaces: src-tauri
+
+            - name: Install frontend dependencies
+              run: npm ci
+
+            - name: Install Linux dependencies
+              if: matrix.platform == 'ubuntu-22.04'
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y \
+                    build-essential \
+                    curl \
+                    wget \
+                    file \
+                    libgtk-3-dev \
+                    libwebkit2gtk-4.1-dev \
+                    libsoup-3.0-dev \
+                    libjavascriptcoregtk-4.1-dev \
+                    libayatana-appindicator3-dev \
+                    librsvg2-dev \
+                    libssl-dev \
+                    libxdo-dev \
+                    patchelf \
+                    libfuse2
+
+                  curl -L -o appimagetool-x86_64.AppImage https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+                  chmod +x appimagetool-x86_64.AppImage
+                  sudo mv appimagetool-x86_64.AppImage /usr/local/bin/appimagetool
+
+            - name: Build Tauri
+              uses: tauri-apps/tauri-action@v0
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Upload artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: build-${{ matrix.platform }}
+                  path: |
+                      src-tauri/target/release/bundle/**/*.AppImage
+                      src-tauri/target/release/bundle/**/*.deb
+                      src-tauri/target/release/bundle/**/*.rpm
+                      src-tauri/target/release/bundle/**/*.tar.gz
+                      src-tauri/target/release/bundle/**/*.msi
+                      src-tauri/target/release/bundle/**/*.exe
+                      src-tauri/target/release/bundle/**/*.dmg
+
+    build-macos:
+        needs: check-flags
+        if: needs.check-flags.outputs.build_macos == 'true'
+
+        runs-on: macos-latest
+
+        permissions:
+            contents: write
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+
+            - uses: dtolnay/rust-toolchain@stable
+              with:
+                  targets: aarch64-apple-darwin, x86_64-apple-darwin
+
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  workspaces: src-tauri
+
+            - name: Install frontend dependencies
+              run: npm ci
+
+            - name: Build Universal macOS App
+              uses: tauri-apps/tauri-action@v0
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  args: --target universal-apple-darwin
+
+            - name: Upload macOS artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: build-macos
+                  path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+
+    create-release:
+        needs: [build, build-macos]
+        runs-on: ubuntu-latest
+
+        permissions:
+            contents: write
+
+        steps:
+            - uses: actions/download-artifact@v4
+              with:
+                  path: release-artifacts
+
+            - name: Create Release
+              uses: softprops/action-gh-release@v1
+              with:
+                  tag_name: build-${{ github.sha }}
+                  name: Automated Build
+                  prerelease: true
+                  files: release-artifacts/**/*

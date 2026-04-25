@@ -1,0 +1,24 @@
+{
+    "$schema": "../gen/schemas/desktop-schema.json",
+    "identifier": "default",
+    "description": "Capability for the main window",
+    "windows": [
+        "main",
+        "network-debug",
+        "customization-inspector"
+    ],
+    "permissions": [
+        "core:default",
+        "core:window:default",
+        "core:window:allow-start-dragging",
+        "core:window:allow-toggle-maximize",
+        "core:window:allow-minimize",
+        "core:window:allow-close",
+        "opener:default",
+        "notification:default",
+        "dialog:default",
+        "fs:default",
+        "fs:allow-write-text-file",
+        "core:webview:allow-create-webview-window"
+    ]
+}
